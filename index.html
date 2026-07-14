@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ResumeIQ — AI Candidate Screener</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1d2230;
+    --border: #2a2f3d;
+    --text: #e7e9ee;
+    --muted: #9aa1b2;
+    --accent: #6c8cff;
+    --accent-2: #8f6cff;
+    --good: #3ecf8e;
+    --warn: #f5a623;
+    --bad: #f0555c;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 32px 24px 16px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 28px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 120px;
+  }
+  textarea:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  #jd-textarea { min-height: 180px; }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .tab-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .tab-btn.remove-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--bad);
+    padding: 8px 10px;
+  }
+  .add-candidate-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .add-candidate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .resume-pane { display: none; }
+  .resume-pane.active { display: block; }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: center;
+  }
+  #screen-btn {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border: none;
+    color: #fff;
+    padding: 14px 32px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #screen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  #status-text { color: var(--muted); font-size: 13px; min-height: 18px; }
+
+  #error-box {
+    display: none;
+    background: rgba(240, 85, 92, 0.12);
+    border: 1px solid var(--bad);
+    color: var(--bad);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .results-grid {
+    display: grid;
+    gap: 16px;
+  }
+  .result-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .result-title { display: flex; align-items: center; gap: 12px; }
+  .rank-badge {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .rank-badge.rank-1 { background: var(--good); color: #06231a; border-color: var(--good); }
+  .candidate-label { font-size: 16px; font-weight: 600; }
+  .overall-score { font-size: 24px; font-weight: 800; }
+  .score-good { color: var(--good); }
+  .score-mid { color: var(--warn); }
+  .score-low { color: var(--bad); }
+
+  .recommend-badge {
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .recommend-yes { background: rgba(62, 207, 142, 0.15); color: var(--good); }
+  .recommend-no { background: rgba(240, 85, 92, 0.15); color: var(--bad); }
+
+  .criteria-list { display: grid; gap: 8px; margin-bottom: 14px; }
+  .criterion-row { display: grid; grid-template-columns: 140px 1fr 32px; align-items: center; gap: 10px; font-size: 13px; }
+  .criterion-name { color: var(--muted); }
+  .bar-track { background: var(--panel-2); border-radius: 999px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .criterion-value { text-align: right; color: var(--muted); }
+
+  .tenets, .red-flags { margin: 0 0 10px; padding-left: 18px; font-size: 13px; }
+  .tenets li { color: var(--text); margin-bottom: 4px; }
+  .red-flags li { color: var(--warn); margin-bottom: 4px; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 12px 0 6px; }
+
+  .candidate-error { color: var(--bad); font-size: 13px; }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 24px;
+  }
+
+  @media (max-width: 640px) {
+    .criterion-row { grid-template-columns: 100px 1fr 28px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ResumeIQ</h1>
+  <p>AI Candidate Screener — built by Aruna Rajamani</p>
+</header>
+
+<div class="container">
+
+  <section class="card">
+    <h2>Job Description</h2>
+    <textarea id="jd-textarea" placeholder="Paste the full job posting here — requirements and all..."></textarea>
+  </section>
+
+  <section class="card">
+    <h2>Candidates <span id="candidate-count" style="color: var(--muted); text-transform: none; font-weight: 400;"></span></h2>
+    <div class="tabs" id="resume-tabs"></div>
+    <div id="resume-panes"></div>
+    <button class="add-candidate-btn" id="add-candidate-btn" type="button">+ Add candidate</button>
+  </section>
+
+  <section class="actions">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      <button id="screen-btn" type="button">Screen Candidates</button>
+      <div id="status-text"></div>
+    </div>
+  </section>
+
+  <div id="error-box"></div>
+
+  <section id="results-section" style="display:none;">
+    <h2 style="color: var(--muted); font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em;">Results</h2>
+    <div class="results-grid" id="results-grid"></div>
+  </section>
+
+</div>
+
+<footer>ResumeIQ Prototype · Calls the Claude API live via a Cloudflare Worker proxy</footer>
+
+<script>
+(function () {
+  const WORKER_URL = 'https://resumeiq-proxy.aruna-ranga.workers.dev';
+  const MAX_CANDIDATES = 5;
+
+  const CRITERIA = [
+    { key: 'experience', label: 'Experience' },
+    { key: 'technicalSkills', label: 'Technical Skills' },
+    { key: 'domainKnowledge', label: 'Domain Knowledge' },
+    { key: 'leadership', label: 'Leadership' },
+    { key: 'communication', label: 'Communication' },
+  ];
+
+  let resumes = [
+    { id: 1, text: '' },
+    { id: 2, text: '' },
+  ];
+  let activeId = 1;
+  let nextId = 3;
+
+  const jdTextarea = document.getElementById('jd-textarea');
+  const tabsEl = document.getElementById('resume-tabs');
+  const panesEl = document.getElementById('resume-panes');
+  const addBtn = document.getElementById('add-candidate-btn');
+  const screenBtn = document.getElementById('screen-btn');
+  const statusText = document.getElementById('status-text');
+  const errorBox = document.getElementById('error-box');
+  const resultsSection = document.getElementById('results-section');
+  const resultsGrid = document.getElementById('results-grid');
+  const candidateCount = document.getElementById('candidate-count');
+
+  function renderTabs() {
+    tabsEl.innerHTML = '';
+    resumes.forEach((r, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tab-btn' + (r.id === activeId ? ' active' : '');
+      btn.textContent = 'Candidate ' + (idx + 1);
+      btn.addEventListener('click', () => { activeId = r.id; renderTabs(); renderPanes(); });
+      tabsEl.appendChild(btn);
+    });
+    candidateCount.textContent = '(' + resumes.length + ' / ' + MAX_CANDIDATES + ')';
+    addBtn.disabled = resumes.length >= MAX_CANDIDATES;
+  }
+
+  function renderPanes() {
+    panesEl.innerHTML = '';
+    resumes.forEach((r, idx) => {
+      const pane = document.createElement('div');
+      pane.className = 'resume-pane' + (r.id === activeId ? ' active' : '');
+
+      const wrap = document.createElement('div');
+      if (resumes.length > 2) {
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'tab-btn remove-btn';
+        removeBtn.textContent = 'Remove Candidate ' + (idx + 1);
+        removeBtn.style.marginBottom = '8px';
+        removeBtn.addEventListener('click', () => {
+          resumes = resumes.filter(x => x.id !== r.id);
+          if (activeId === r.id) activeId = resumes[0].id;
+          renderTabs();
+          renderPanes();
+        });
+        wrap.appendChild(removeBtn);
+      }
+
+      const ta = document.createElement('textarea');
+      ta.placeholder = 'Paste resume text for Candidate ' + (idx + 1) + '...';
+      ta.value = r.text;
+      ta.addEventListener('input', (e) => { r.text = e.target.value; });
+      wrap.appendChild(ta);
+
+      pane.appendChild(wrap);
+      panesEl.appendChild(pane);
+    });
+  }
+
+  addBtn.addEventListener('click', () => {
+    if (resumes.length >= MAX_CANDIDATES) return;
+    const id = nextId++;
+    resumes.push({ id, text: '' });
+    activeId = id;
+    renderTabs();
+    renderPanes();
+  });
+
+  function scoreClass(score) {
+    if (score >= 75) return 'score-good';
+    if (score >= 50) return 'score-mid';
+    return 'score-low';
+  }
+
+  function renderResults(results) {
+    resultsGrid.innerHTML = '';
+    results.forEach((res, idx) => {
+      const card = document.createElement('div');
+      card.className = 'result-card';
+
+      if (res.error) {
+        card.innerHTML =
+          '<div class="result-header"><div class="result-title">' +
+          '<div class="rank-badge">' + (idx + 1) + '</div>' +
+          '<div class="candidate-label">' + escapeHtml(res.label) + '</div>' +
+          '</div></div>' +
+          '<div class="candidate-error">Scoring failed: ' + escapeHtml(res.error) + '</div>';
+        resultsGrid.appendChild(card);
+        return;
+      }
+
+      const header = document.createElement('div');
+      header.className = 'result-header';
+
+      const title = document.createElement('div');
+      title.className = 'result-title';
+      title.innerHTML =
+        '<div class="rank-badge' + (idx === 0 ? ' rank-1' : '') + '">' + (idx + 1) + '</div>' +
+        '<div class="candidate-label">' + escapeHtml(res.label) + '</div>';
+
+      const scoreWrap = document.createElement('div');
+      scoreWrap.style.display = 'flex';
+      scoreWrap.style.alignItems = 'center';
+      scoreWrap.style.gap = '14px';
+      scoreWrap.innerHTML =
+        '<span class="recommend-badge ' + (res.recommend === 'Yes' ? 'recommend-yes' : 'recommend-no') + '">' +
+          (res.recommend === 'Yes' ? 'Recommend Interview' : 'Not Recommended') +
+        '</span>' +
+        '<span class="overall-score ' + scoreClass(res.overallScore) + '">' + res.overallScore + '</span>';
+
+      header.appendChild(title);
+      header.appendChild(scoreWrap);
+      card.appendChild(header);
+
+      const criteriaList = document.createElement('div');
+      criteriaList.className = 'criteria-list';
+      CRITERIA.forEach(c => {
+        const val = (res.criteria && res.criteria[c.key]) || 0;
+        const row = document.createElement('div');
+        row.className = 'criterion-row';
+        row.innerHTML =
+          '<span class="criterion-name">' + c.label + '</span>' +
+          '<span class="bar-track"><span class="bar-fill" style="width:' + val + '%"></span></span>' +
+          '<span class="criterion-value">' + val + '</span>';
+        criteriaList.appendChild(row);
+      });
+      card.appendChild(criteriaList);
+
+      if (res.topTenets && res.topTenets.length) {
+        const label = document.createElement('div');
+        label.className = 'section-label';
+        label.textContent = 'Top Tenets';
+        card.appendChild(label);
+        const ul = document.createElement('ul');
+        ul.className = 'tenets';
+        res.topTenets.slice(0, 3).forEach(t => {
+          const li = document.createElement('li');
+          li.textContent = t;
+          ul.appendChild(li);
+        });
+        card.appendChild(ul);
+      }
+
+      if (res.redFlags && res.redFlags.length) {
+        const label = document.createElement('div');
+        label.className = 'section-label';
+        label.textContent = 'Red Flags';
+        card.appendChild(label);
+        const ul = document.createElement('ul');
+        ul.className = 'red-flags';
+        res.redFlags.forEach(f => {
+          const li = document.createElement('li');
+          li.textContent = f;
+          ul.appendChild(li);
+        });
+        card.appendChild(ul);
+      }
+
+      resultsGrid.appendChild(card);
+    });
+    resultsSection.style.display = results.length ? 'block' : 'none';
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function setLoading(isLoading) {
+    screenBtn.disabled = isLoading;
+    screenBtn.textContent = isLoading ? 'Screening...' : 'Screen Candidates';
+    statusText.textContent = isLoading ? 'Calling Claude for each candidate — this can take a few seconds...' : '';
+  }
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+  }
+
+  function clearError() {
+    errorBox.style.display = 'none';
+    errorBox.textContent = '';
+  }
+
+  screenBtn.addEventListener('click', async () => {
+    clearError();
+    resultsSection.style.display = 'none';
+
+    const jobDescription = jdTextarea.value.trim();
+    const filled = resumes.filter(r => r.text.trim().length > 0);
+
+    if (!jobDescription) {
+      showError('Please paste a job description before screening.');
+      return;
+    }
+    if (filled.length === 0) {
+      showError('Please paste at least one resume before screening.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        jobDescription,
+        resumes: filled.map((r, idx) => ({
+          id: r.id,
+          label: 'Candidate ' + (idx + 1),
+          text: r.text.trim(),
+        })),
+      };
+
+      const resp = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        throw new Error('Worker returned status ' + resp.status);
+      }
+
+      const data = await resp.json();
+      if (!data || !Array.isArray(data.results)) {
+        throw new Error('Unexpected response shape from scoring service.');
+      }
+
+      const sorted = data.results.slice().sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+      renderResults(sorted);
+    } catch (err) {
+      showError('Screening failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  renderTabs();
+  renderPanes();
+})();
+</script>
+
+</body>
+</html>
