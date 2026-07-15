@@ -4,6 +4,8 @@
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-5';
 const MAX_RESUMES = 5;
+const MAX_RESUME_TEXT_LENGTH = 20000;
+const ANTHROPIC_TIMEOUT_MS = 30000;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -58,28 +60,46 @@ function jsonResponse(body, status = 200) {
 }
 
 async function scoreCandidate(jobDescription, candidate, apiKey) {
+  const resumeText = candidate.text.length > MAX_RESUME_TEXT_LENGTH
+    ? candidate.text.slice(0, MAX_RESUME_TEXT_LENGTH)
+    : candidate.text;
+
   const prompt =
     'You are an expert technical recruiter. Score the following candidate resume against the job description below. ' +
     'Be rigorous and consistent. Recognize equivalent language (e.g. "led a team of 12" implies leadership even without the word "led team").\n\n' +
     '--- JOB DESCRIPTION ---\n' + jobDescription + '\n\n' +
-    '--- CANDIDATE RESUME ---\n' + candidate.text + '\n\n' +
+    '--- CANDIDATE RESUME ---\n' + resumeText + '\n\n' +
     'Call the report_candidate_score tool with your structured evaluation.';
 
-  const resp = await fetch(ANTHROPIC_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1024,
-      tools: [SCORING_TOOL],
-      tool_choice: { type: 'tool', name: 'report_candidate_score' },
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
+
+  let resp;
+  try {
+    resp = await fetch(ANTHROPIC_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 1024,
+        tools: [SCORING_TOOL],
+        tool_choice: { type: 'tool', name: 'report_candidate_score' },
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Anthropic API request timed out after ' + (ANTHROPIC_TIMEOUT_MS / 1000) + 's.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!resp.ok) {
     const errText = await resp.text();

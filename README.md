@@ -22,7 +22,7 @@ ResumeIQ moves the first-pass screening from human effort to AI, so recruiters c
 ## How It Works
 
 1. **Paste a job description** - the full posting, requirements and all
-2. **Add up to 5 candidate resumes** - one per tab, plain text paste
+2. **Add up to 5 candidate resumes** - one per tab, either paste plain text or upload a PDF/DOCX/TXT file (parsed client-side)
 3. **Click Screen Candidates** - Claude reads each resume against the JD
 4. **Get ranked results** - every candidate scored 0–100 with:
    - Overall match score
@@ -37,10 +37,11 @@ ResumeIQ moves the first-pass screening from human effort to AI, so recruiters c
 
 | Layer | Technology |
 |---|---|
-| Frontend | HTML, CSS, Vanilla JavaScript |
+| Frontend | HTML, CSS, Vanilla JavaScript, bundled with [Vite](https://vitejs.dev/) |
+| File parsing | [pdf.js](https://mozilla.github.io/pdf.js/) (PDF) and [mammoth.js](https://github.com/mwilliamson/mammoth.js) (DOCX), both client-side |
 | AI Scoring | Anthropic Claude API (claude-sonnet-4-5) |
 | API Proxy | Cloudflare Workers (handles CORS + API key security) |
-| Hosting | Netlify |
+| Hosting | Netlify (auto-deployed from GitHub) |
 
 The API key is stored as an encrypted secret in Cloudflare — it is never exposed in the frontend code.
 
@@ -70,8 +71,8 @@ Claude returns structured JSON reliably and handles nuanced resume language well
 **Why Cloudflare Workers for the proxy?**
 Browser-based apps can't call the Anthropic API directly due to CORS restrictions. The Worker acts as a secure middleman - the API key lives in Cloudflare's encrypted secret store, never in the HTML.
 
-**Why plain text paste instead of PDF upload?**
-For a POC, text paste eliminates PDF parsing complexity and lets the demo run entirely in the browser with no backend infrastructure beyond the Worker.
+**Why parse PDF/DOCX client-side instead of in the Worker?**
+Cloudflare Workers don't run full Node.js, so Node-dependent PDF-parsing libraries won't work there. Extracting text in the browser with pdf.js/mammoth.js keeps the Worker's contract unchanged (it still just receives plain text) and avoids uploading binary files at all — extracted text lands in an editable textarea, so a bad extraction (e.g. a scanned resume with no text layer) is visibly recoverable.
 
 **Why 5 candidates per run?**
 A deliberate constraint for the prototype - keeps latency low and costs minimal. Each scoring call costs fractions of a cent; a 5-candidate run costs under $0.02.
@@ -82,7 +83,13 @@ A deliberate constraint for the prototype - keeps latency low and costs minimal.
 
 | File | Purpose |
 |---|---|
-| `index.html` | The entire frontend — self-contained HTML/CSS/JS, no build step |
+| `index.html` | Vite entry template — markup only |
+| `src/main.js` | App bootstrap — wires up all event listeners |
+| `src/state.js` | Candidate state (resumes, active tab, text-length cap) |
+| `src/fileParsing.js` | Client-side PDF/DOCX/TXT text extraction |
+| `src/api.js` | Fetch call to the Cloudflare Worker proxy |
+| `src/render.js` | DOM rendering for tabs, panes, and results |
+| `src/styles.css` | All styling |
 | `worker_final.js` | Cloudflare Worker source — proxies scoring requests to the Anthropic API |
 | `README.md` | This file |
 
@@ -91,13 +98,16 @@ A deliberate constraint for the prototype - keeps latency low and costs minimal.
 ## How to Run It Locally
 
 1. Clone this repo
-2. Open `index.html` in any browser
-3. The app calls `https://resumeiq-proxy.aruna-ranga.workers.dev` - no local setup needed
+2. `npm install`
+3. `npm run dev` and open the printed local URL
+4. The app calls `https://resumeiq-proxy.aruna-ranga.workers.dev` - no backend setup needed to try it
+
+To build for production: `npm run build` outputs a static `dist/` folder (`npm run preview` serves it locally to sanity-check).
 
 To deploy your own version:
 1. Deploy the Cloudflare Worker (`worker_final.js`) with your own Anthropic API key as an environment secret named `ANTHROPIC_KEY`
-2. Update the `WORKER_URL` constant near the top of the `<script>` block in `index.html` to point at your own Worker
-3. Drag `index.html` to [Netlify Drop](https://app.netlify.com/drop)
+2. Update the `WORKER_URL` constant in `src/api.js` to point at your own Worker
+3. Connect your fork to Netlify (Site settings → Link to Git provider) with build command `npm run build` and publish directory `dist` — every push to `main` will auto-deploy
 
 ---
 
